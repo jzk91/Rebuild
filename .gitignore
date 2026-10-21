@@ -1,0 +1,12 @@
+# Python 运行时自动生成的字节码缓存
+__pycache__/
+*.pyc
+
+# pytest 的缓存 (记录上次哪些测试失败, 给 --lf 用)
+.pytest_cache/
+
+# macOS Finder 在每个打开过的目录里自动生成
+.DS_Store
+
+# VS Code 的个人设置 (例如选哪个 conda 环境), 只对你这台机器有意义
+.vscode/
