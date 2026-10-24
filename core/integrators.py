@@ -1,6 +1,6 @@
 import numpy as np
 from math import floor
-from roots import newton
+from core.roots import newton
 
 def _time_grid(t0, tf, h):
    

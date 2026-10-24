@@ -18,7 +18,7 @@ import numpy as np
 @dataclass(frozen=True)
 class GravityTankParams:
     """Parameters from Table 5.1.
-    Water density is not in the table, it is taken as 62.4 lbm/ft3
+    Water density is not in the table; it is taken as 62.4 lbm/ft3
     """
     g: float = 32.2            # ft/s2
     gc: float = 32.2           # lbm·ft/(lbf·s2)
