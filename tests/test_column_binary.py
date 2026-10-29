@@ -13,6 +13,8 @@
 
 本文件里的 `_y()` 按模块 docstring 的布局直接拼状态向量, 不经过 `pack`:
 f 与 outputs 的测试不依赖 pack 写得对不对, pack 本身单独测。
+
+python -m pytest tests/test_column_binary.py
 """
 
 import dataclasses
