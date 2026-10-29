@@ -123,15 +123,129 @@ class ColumnOutputs(NamedTuple):
 
 
 def equilibrium(x_L, alpha):
-    pass
-def f(t, y, p):
-    pass
-def outputs(y, p):
-    pass
+    """
+    x_L is an array, return y_V is also an array with the same shape
+    """
+    return alpha * x_L / (1 + (alpha - 1) * x_L)
+
+
+def hydraulics(L0, M, p):
+    """
+    Calculate the liquid flow rate of all trays (NT,)
+    L0, M are arrays, return L is also an array with the same shape
+    """
+    return L0 + (M - p.M0) / p.beta
+
+
 def pack(x_L, M, erintD, erintB, p):
-    """M shape(NT+2,); only M[1:NT+1] is used."""
-    pass
+    """
+    Pack the variables into the state vector y
+    x_L: (NT+2,) liquid mole fraction
+    M: (NT+2,) liquid holdups, mol. Only the tray holdups M[1:NT+1] are used.
+    """
+    NT = p.NT
+
+    x_L = np.array(x_L, dtype=np.float64)
+    M = np.array(M, dtype=np.float64)
+    erint = np.array((erintD,erintB), dtype=np.float64)
+    
+    M_only_tray = M[1:NT + 1]
+    x_L_only_tray = x_L[1:NT + 1]
+    Mx_L_only_tray = M_only_tray * x_L_only_tray
+    Mx_L = np.append(np.append(p.MD * x_L[0], Mx_L_only_tray), p.MB * x_L[-1])
+    
+    y = np.concatenate((Mx_L, M_only_tray, erint))
+
+    return y
+
+
 def unpack(y, p):
-    pass
+    """
+    Unpack the state vector y into x_L, M, erintD, erintB
+    x_L: (NT+2,) liquid mole fraction
+    M: (NT+2,) liquid holdups, mol. M[0] and M[NT+2] comes from p.MD, p.MB
+    """
+    NT = p.NT
+    
+    Mx_L = y[0:NT + 2]
+    M_only_tray = y[NT + 2:2 * NT + 2]
+    erintD = y[2 * NT + 2]
+    erintB = y[2 * NT + 3]
+
+    M = np.append(np.append(p.MD, M_only_tray), p.MB)
+    x_L = Mx_L / M
+
+    return x_L, M, erintD, erintB
+
+
+def outputs(y, p):
+    """Calculate all the algebraic variables and return ColumnOutputs"""
+    NT, NF = p.NT, p.NF
+    R0, V0, F = p.R0, p.V0, p.F
+    KcD, KcB = p.KcD, p.KcB
+    xD_set, xB_set = p.xD_set, p.xB_set
+    tauD, tauB = p.tauD, p.tauB
+
+    # unpack
+    x_L, M, erintD, erintB = unpack(y, p)
+
+    # Equilibrium
+    y_V = equilibrium(x_L, p.alpha)[:-1]
+
+    # PI controller
+    eD = xD_set - x_L[-1]
+    eB = xB_set - x_L[0]
+    R = R0 + KcD * (eD + erintD / tauD)
+    V = V0 - KcB * (eB + erintB / tauB)
+
+    # Level controller
+    D = V - R
+    L1 = hydraulics(R0 + F, M[1], p)
+    B = L1 - V
+
+    # Hydraulics
+    L0 = np.empty(NT)
+    L0[0:NF] = R0 + F
+    L0[NF:NT] = R0
+    L_only_tray = hydraulics(L0, M[1:NT + 1], p) 
+    L = np.append(np.append(B, L_only_tray), R)
+
+    return ColumnOutputs(x_L=x_L, y_V=y_V, M=M, L=L, V=V, B=B, R=R, D=D)
+
+
+def f(t, y, p):
+    """
+    Calculate the derivatives of the state variables explicitly
+    """
+    NT, NF = p.NT, p.NF
+    F, z = p.F, p.z
+    xD_set, xB_set = p.xD_set, p.xB_set
+    o = outputs(y, p)
+    L, x_L, y_V = o.L, o.x_L, o.y_V
+    V, R, D, B = o.V, o.R, o.D, o.B
+
+    # liquid holdup on each tray
+    dM = L[2:NT + 2] - L[1:NT + 1]
+    dM[NF - 1] += F #feed
+    
+    # holdup of the light component on each tray
+    dMx_L_tray = L[2:NT + 2] * x_L[2:NT + 2] - L[1:NT + 1] * x_L[1:NT + 1] + V * (y_V[0:NT] - y_V[1:NT + 1])
+
+    # drum
+    dMDxD = V * y_V[NT] - R * x_L[NT + 1] - D * x_L[NT + 1]
+
+    # base
+    dMBxB = L[1] * x_L[1] - V * y_V[0] - B * x_L[0]
+
+    dMx_L = np.append(np.append(dMBxB, dMx_L_tray), dMDxD)
+    dMx_L[NF] += F * z #feed
+    
+    eD = xD_set - x_L[NT + 1]
+    eB = xB_set - x_L[0]
+
+    dy = np.concatenate((dMx_L, dM, np.array((eD, eB))))
+
+    return dy
+
 def steady_state(p):
     pass
